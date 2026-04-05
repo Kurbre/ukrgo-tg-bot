@@ -25,6 +25,7 @@
     "dotenv": "^17.4.0",
     "form-data": "^4.0.5",
     "grammy": "^1.42.0",
+    "grammy-media-group": "^1.0.4",
     "iconv-lite": "^0.7.2",
     "qs": "^6.15.0",
     "tough-cookie": "^6.0.1",

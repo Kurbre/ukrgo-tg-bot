@@ -613,6 +613,11 @@ gopd@^1.2.0:
   resolved "https://registry.yarnpkg.com/gopd/-/gopd-1.2.0.tgz#89f56b8217bdbc8802bd299df6d7f1081d7e51a1"
   integrity sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==
 
+grammy-media-group@^1.0.4:
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/grammy-media-group/-/grammy-media-group-1.0.4.tgz#c1e9bc54990622e0afb939e67dfbca66251c311c"
+  integrity sha512-iSUbcIi1RUHdG4jaV6/A7amWfVyKO4ZYIxrORp46P37DTMYS9vtwAwh896hcFDmCzFi7LLdYEAkIS4pJ4DhKsA==
+
 grammy@^1.42.0:
   version "1.42.0"
   resolved "https://registry.yarnpkg.com/grammy/-/grammy-1.42.0.tgz#033c6643158a98384b1d6c3ecedeb5b51c9e499e"

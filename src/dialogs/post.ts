@@ -6,6 +6,10 @@ import { regions } from "../utils/geo";
 import { createPost } from "../utils/posts";
 import { renderMenu } from "../utils/profile/menu";
 import type { MyConversation, MyConversationContext } from "../utils/types";
+import { uploadPhoto } from "../utils/image";
+import { v4 as uuidv4 } from "uuid";
+import axios from "axios";
+import { client } from "../utils/auth";
 
 export const createPostDialog = async (
   conversation: MyConversation,
@@ -145,6 +149,54 @@ export const createPostDialog = async (
   );
   const phoneCtx = await conversation.waitFor("message:text");
   const phones = phoneCtx.message.text.split(", ").join("|@|");
+
+  // Фото
+  await ctx.reply(
+    "Отправьте до 5 фото. Чтобы закончить — отправьте любое сообщение кроме фото.",
+  );
+
+  const buffers: Buffer[] = [];
+
+  while (buffers.length < 5) {
+    const msg = await conversation.waitFor("message");
+
+    if (!msg.message.photo) break;
+
+    const photo = msg.message.photo.at(-1)!;
+
+    // 1. Получаем info о файле
+    const file = await ctx.api.getFile(photo.file_id);
+
+    if (!file.file_path) continue;
+
+    // 2. Cкачиваем файл
+    const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${file.file_path}`;
+
+    const response = await client.get(fileUrl, {
+      responseType: "arraybuffer",
+    });
+
+    // 3. Создаём Buffer
+    const buffer = Buffer.from(response.data);
+
+    buffers.push(buffer);
+
+    await ctx.reply(`Фото ${buffers.length} получено и преобразовано в буфер.`);
+  }
+
+  await ctx.reply("🔄 Загружаю фото...", {
+    reply_markup: {
+      remove_keyboard: true,
+    },
+  });
+
+  for (const buffer of buffers) {
+    const response = await conversation.external(async () => {
+      return await uploadPhoto(buffer, `image_${uuidv4()}.jpg`);
+    });
+
+    console.log(response);
+  }
 
   // Каптча
   await ctx.reply("🔄 Загружаю капчу...");
