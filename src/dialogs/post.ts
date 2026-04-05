@@ -1,6 +1,5 @@
 import { InputFile, Keyboard } from "grammy";
 import { v4 as uuidv4 } from "uuid";
-import { client } from "../utils/auth";
 import { getCaptchaData } from "../utils/captcha";
 import { getCitiesByRegion } from "../utils/cities";
 import { getDistrictsByRegion } from "../utils/district";
@@ -149,57 +148,6 @@ export const createPostDialog = async (
   const phoneCtx = await conversation.waitFor("message:text");
   const phones = phoneCtx.message.text.split(", ").join("|@|");
 
-  // Фото
-  const uploadedPhotos: Buffer[] = [];
-  let waitingForPhotos = true;
-
-  await ctx.reply(
-    "📸 Пришлите от 1 до 10 фото.\nОтправляйте по одному или альбомом.\nКогда закончите, нажмите кнопку **'Завершить загрузку'**",
-    {
-      reply_markup: new Keyboard().text("✅ Завершить загрузку").resized(),
-    },
-  );
-
-  while (waitingForPhotos) {
-    const photoCtx = await conversation.waitFor([
-      "message:photo",
-      "message:text",
-    ]);
-
-    // Если нажата кнопка завершения
-    if (photoCtx.message?.text === "✅ Завершить загрузку") {
-      if (uploadedPhotos.length === 0) {
-        await ctx.reply("⚠️ Нужно загрузить хотя бы одно фото!");
-        continue;
-      }
-      waitingForPhotos = false;
-      break;
-    }
-
-    // Если пришло фото
-    if (photoCtx.message?.photo) {
-      const lastPhoto = photoCtx.message.photo.pop();
-      if (lastPhoto) {
-        const file = await ctx.api.getFile(lastPhoto.file_id);
-        const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${file.file_path}`;
-
-        // Используем axios напрямую для внешних URL, чтобы не мешать базовому URL client
-        const photoResponse = await client.get(fileUrl, {
-          responseType: "arraybuffer",
-        });
-        const buffer = Buffer.from(photoResponse.data);
-
-        uploadedPhotos.push(buffer);
-        await ctx.reply(`📥 Фото получено (${uploadedPhotos.length}/10)`);
-      }
-    }
-
-    if (uploadedPhotos.length >= 10) {
-      await ctx.reply("🚀 Максимум 10 фото достигнут. Начинаю обработку...");
-      waitingForPhotos = false;
-    }
-  }
-
   // Каптча
   await ctx.reply("🔄 Загружаю капчу...");
   const captchaBuffer = await conversation.external(() => getCaptchaData());
@@ -211,18 +159,6 @@ export const createPostDialog = async (
   });
   const captchaCtx = await conversation.waitFor("message:text");
   const captcha = captchaCtx.message.text.trim();
-
-  // Убираем клавиатуру загрузки
-  await ctx.reply("🔄 Загружаю фотографии на сайт...", {
-    reply_markup: { remove_keyboard: true },
-  });
-
-  // Последовательно загружаем каждое фото на сервер
-  for (const [_, buffer] of uploadedPhotos.entries()) {
-    await conversation.external(() =>
-      uploadPhoto(buffer, `image_${uuidv4()}.jpg`),
-    );
-  }
 
   // Публикация
   await ctx.reply("🚀 Публикую...");
