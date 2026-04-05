@@ -1,0 +1,255 @@
+import { InputFile, Keyboard } from "grammy";
+import { v4 as uuidv4 } from "uuid";
+import { client } from "../utils/auth";
+import { getCaptchaData } from "../utils/captcha";
+import { getCitiesByRegion } from "../utils/cities";
+import { getDistrictsByRegion } from "../utils/district";
+import { regions } from "../utils/geo";
+import { uploadPhoto } from "../utils/image";
+import { createPost } from "../utils/posts";
+import { renderMenu } from "../utils/profile/menu";
+import type { MyConversation, MyConversationContext } from "../utils/types";
+
+export const createPostDialog = async (
+  conversation: MyConversation,
+  ctx: MyConversationContext,
+) => {
+  const regionKeyboard = new Keyboard();
+
+  // Область
+  regions.forEach((reg, index) => {
+    regionKeyboard.text(reg.title);
+    // Делаем по 3 кнопки в ряд для компактности
+    if ((index + 1) % 3 === 0) regionKeyboard.row();
+  });
+
+  await ctx.reply("📍 Выберите область Украины:", {
+    reply_markup: regionKeyboard.resized().oneTime(),
+  });
+
+  const regionCtx = await conversation.waitFor("message:text");
+  const selectedRegion = regions.find(
+    (r) => r.title === regionCtx.message.text,
+  );
+
+  if (!selectedRegion) {
+    await ctx.reply("❌ Область не найдена. Начните создание поста заново.", {
+      reply_markup: { remove_keyboard: true },
+    });
+
+    return await renderMenu(ctx);
+  }
+
+  const regionId = selectedRegion.value;
+
+  // Города
+  await ctx.reply(
+    `🔄 Загружаю города для области: ${selectedRegion.title}...`,
+    {
+      reply_markup: { remove_keyboard: true },
+    },
+  );
+
+  const cities = await conversation.external(() =>
+    getCitiesByRegion(selectedRegion.value),
+  );
+
+  if (cities.length === 0) {
+    await ctx.reply(
+      "⚠️ Города не найдены, будет использовано значение 'Весь регион'.",
+    );
+    return;
+  }
+  const cityKeyboard = new Keyboard();
+
+  cities.forEach((city, index) => {
+    cityKeyboard.text(city.name);
+    if ((index + 1) % 3 === 0) cityKeyboard.row();
+  });
+
+  await ctx.reply("🏘 Теперь выберите город:", {
+    reply_markup: cityKeyboard.resized().oneTime(),
+  });
+
+  const cityCtx = await conversation.waitFor("message:text");
+  const selectedCity = cities.find((c) => c.name === cityCtx.message.text);
+
+  const cityId = selectedCity?.id || "0";
+
+  // Район
+  await ctx.reply(`🔄 Загружаю районы для города: ${selectedCity?.name}...`, {
+    reply_markup: { remove_keyboard: true },
+  });
+
+  const districts = await conversation.external(() =>
+    getDistrictsByRegion(selectedCity?.id || ""),
+  );
+
+  let districtId = "";
+
+  if (districts.length >= 1) {
+    const cityKeyboard = new Keyboard();
+
+    districts.forEach((city, index) => {
+      cityKeyboard.text(city.name);
+      if ((index + 1) % 3 === 0) cityKeyboard.row();
+    });
+
+    await ctx.reply("🏙️ Теперь выберите район:", {
+      reply_markup: cityKeyboard.resized().oneTime(),
+    });
+
+    const districtCtx = await conversation.waitFor("message:text");
+    const selectedDistrict = districts.find(
+      (c) => c.name === districtCtx.message.text,
+    );
+
+    districtId = selectedDistrict?.id || "";
+
+    await ctx.reply(
+      `✅ Выбрано: ${selectedRegion.title}, г. ${selectedCity?.name || "Центр"}, район ${selectedDistrict?.name}`,
+      { reply_markup: { remove_keyboard: true } },
+    );
+  } else {
+    await ctx.reply(
+      `✅ Выбрано: ${selectedRegion.title}, г. ${selectedCity?.name || "Центр"}`,
+      { reply_markup: { remove_keyboard: true } },
+    );
+  }
+
+  // Возраст
+  await ctx.reply("🧓 Введите возраст: ");
+  const ageCtx = await conversation.waitFor("message:text");
+  const age = ageCtx.message.text;
+
+  // Рост
+  await ctx.reply("📈 Введите рост: ");
+  const heightCtx = await conversation.waitFor("message:text");
+  const height = heightCtx.message.text;
+
+  // Вес
+  await ctx.reply("⚖️ Введите вес: ");
+  const weightCtx = await conversation.waitFor("message:text");
+  const weight = weightCtx.message.text;
+
+  // Заголовок
+  await ctx.reply("📒 Введите заголовок объявления: ");
+  const titleCtx = await conversation.waitFor("message:text");
+  const title = titleCtx.message.text;
+
+  // Описание
+  await ctx.reply("🗒️ Введите описание объявления: ");
+  const textCtx = await conversation.waitFor("message:text");
+  const text = textCtx.message.text;
+
+  // Номер телефона
+  await ctx.reply(
+    "📞 Введите до 3-x номеров телефона через запятую:\nПример: 0673890232, 0956780232, 0759832451",
+  );
+  const phoneCtx = await conversation.waitFor("message:text");
+  const phones = phoneCtx.message.text.split(", ").join("|@|");
+
+  // Фото
+  const uploadedPhotos: Buffer[] = [];
+  let waitingForPhotos = true;
+
+  await ctx.reply(
+    "📸 Пришлите от 1 до 10 фото.\nОтправляйте по одному или альбомом.\nКогда закончите, нажмите кнопку **'Завершить загрузку'**",
+    {
+      reply_markup: new Keyboard().text("✅ Завершить загрузку").resized(),
+    },
+  );
+
+  while (waitingForPhotos) {
+    const photoCtx = await conversation.waitFor([
+      "message:photo",
+      "message:text",
+    ]);
+
+    // Если нажата кнопка завершения
+    if (photoCtx.message?.text === "✅ Завершить загрузку") {
+      if (uploadedPhotos.length === 0) {
+        await ctx.reply("⚠️ Нужно загрузить хотя бы одно фото!");
+        continue;
+      }
+      waitingForPhotos = false;
+      break;
+    }
+
+    // Если пришло фото
+    if (photoCtx.message?.photo) {
+      const lastPhoto = photoCtx.message.photo.pop();
+      if (lastPhoto) {
+        const file = await ctx.api.getFile(lastPhoto.file_id);
+        const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${file.file_path}`;
+
+        // Используем axios напрямую для внешних URL, чтобы не мешать базовому URL client
+        const photoResponse = await client.get(fileUrl, {
+          responseType: "arraybuffer",
+        });
+        const buffer = Buffer.from(photoResponse.data);
+
+        uploadedPhotos.push(buffer);
+        await ctx.reply(`📥 Фото получено (${uploadedPhotos.length}/10)`);
+      }
+    }
+
+    if (uploadedPhotos.length >= 10) {
+      await ctx.reply("🚀 Максимум 10 фото достигнут. Начинаю обработку...");
+      waitingForPhotos = false;
+    }
+  }
+
+  // Каптча
+  await ctx.reply("🔄 Загружаю капчу...");
+  const captchaBuffer = await conversation.external(() => getCaptchaData());
+
+  if (!captchaBuffer) return await ctx.reply("❌ Ошибка при получении капчи.");
+
+  await ctx.replyWithPhoto(new InputFile(captchaBuffer), {
+    caption: "Введите код с картинки:",
+  });
+  const captchaCtx = await conversation.waitFor("message:text");
+  const captcha = captchaCtx.message.text.trim();
+
+  // Убираем клавиатуру загрузки
+  await ctx.reply("🔄 Загружаю фотографии на сайт...", {
+    reply_markup: { remove_keyboard: true },
+  });
+
+  // Последовательно загружаем каждое фото на сервер
+  for (const [_, buffer] of uploadedPhotos.entries()) {
+    await conversation.external(() =>
+      uploadPhoto(buffer, `image_${uuidv4()}.jpg`),
+    );
+  }
+
+  // Публикация
+  await ctx.reply("🚀 Публикую...");
+
+  const result = await createPost({
+    title,
+    text,
+    captchaCode: captcha,
+    cityId,
+    regionId, // Например, Харьков
+    sectionId: "9", // Услуги
+    subsectionId: "146",
+    phones,
+    age,
+    height,
+    weight,
+    districtId,
+    email: ctx.session.emailPost,
+    userId: ctx.session.idUser,
+  });
+
+  if (result.success) {
+    await ctx.reply(
+      "✅ Объявление успешно добавлено!\nВам будет выслана ссылка активации объявления на почту",
+    );
+    await renderMenu(ctx);
+  } else {
+    await ctx.reply("❌ Ошибка. Возможно, неверный код.");
+  }
+};
