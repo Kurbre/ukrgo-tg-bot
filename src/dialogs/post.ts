@@ -151,16 +151,19 @@ export const createPostDialog = async (
   const phones = phoneCtx.message.text.split(", ").join("|@|");
 
   // Фото
-  await ctx.reply(
-    "Отправьте до 5 фото. Чтобы закончить — отправьте любое сообщение кроме фото.",
-  );
+  const photoKeyboard = new Keyboard();
+  photoKeyboard.text("✅ Загрузить фото");
+
+  await ctx.reply("Отправьте до 5 фото.", {
+    reply_markup: photoKeyboard.resized().oneTime(),
+  });
 
   const buffers: Buffer[] = [];
 
   while (buffers.length < 5) {
     const msg = await conversation.waitFor("message");
 
-    if (!msg.message.photo) break;
+    if (!msg.message.photo || msg.message.text === "✅ Загрузить фото") break;
 
     const photo = msg.message.photo.at(-1)!;
 
@@ -180,8 +183,6 @@ export const createPostDialog = async (
     const buffer = Buffer.from(response.data);
 
     buffers.push(buffer);
-
-    await ctx.reply(`Фото ${buffers.length} получено и преобразовано в буфер.`);
   }
 
   await ctx.reply("🔄 Загружаю фото...", {
@@ -190,12 +191,17 @@ export const createPostDialog = async (
     },
   });
 
-  for (const buffer of buffers) {
-    const response = await conversation.external(async () => {
-      return await uploadPhoto(buffer, `image_${uuidv4()}.jpg`);
-    });
+  try {
+    for (const buffer of buffers) {
+      await conversation.external(async () => {
+        return await uploadPhoto(buffer, `image_${uuidv4()}.jpg`);
+      });
+    }
 
-    console.log(response);
+    await ctx.reply("✅ Фотографии успешно загружены");
+  } catch (e) {
+    console.log(e);
+    await ctx.reply("❌ Ошибка. Не удалось загрузить фотографии");
   }
 
   // Каптча
