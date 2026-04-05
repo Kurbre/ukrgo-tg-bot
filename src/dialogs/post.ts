@@ -1,10 +1,8 @@
 import { InputFile, Keyboard } from "grammy";
-import { v4 as uuidv4 } from "uuid";
 import { getCaptchaData } from "../utils/captcha";
 import { getCitiesByRegion } from "../utils/cities";
 import { getDistrictsByRegion } from "../utils/district";
 import { regions } from "../utils/geo";
-import { uploadPhoto } from "../utils/image";
 import { createPost } from "../utils/posts";
 import { renderMenu } from "../utils/profile/menu";
 import type { MyConversation, MyConversationContext } from "../utils/types";

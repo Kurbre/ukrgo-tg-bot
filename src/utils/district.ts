@@ -42,7 +42,11 @@ export async function getDistrictsByRegion(cityId: string) {
       }
     }
 
-    return [{ id: "", name: "Не важно" }, ...districts];
+    if (districts.length >= 1) {
+      return [{ id: "", name: "Не важно" }, ...districts];
+    }
+
+    return districts;
   } catch (error) {
     console.error("❌ Ошибка парсинга районов:", error);
     return [];
